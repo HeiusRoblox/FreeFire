@@ -190,12 +190,15 @@ downloadBtn.addEventListener("click", () => {
 // Nút copy toàn bộ XML
 copyFullBtn.addEventListener("click", () => {
   if (!xmlDoc) return;
-  const serializer = new XMLSerializer();
-  let xmlStr = serializer.serializeToString(xmlDoc.documentElement);
+
+  // Lấy raw XML text thật, không escape
+  let xmlStr = xmlDoc.documentElement.outerHTML;
+
   const header = '<?xml version="1.0" encoding="UTF-8"?>\n' +
                  '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" ' +
                  '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n';
   xmlStr = header + xmlStr;
+
   navigator.clipboard.writeText(xmlStr);
   copyFullBtn.textContent = "✅ Copied!";
   setTimeout(() => (copyFullBtn.textContent = "📋 Copy Full Code"), 1500);
