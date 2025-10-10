@@ -11,6 +11,7 @@
     font-family: monospace;
     color: #fff;
   }
+
   .container {
     width: 90%; max-width: 900px;
     margin: 20px auto;
@@ -18,12 +19,15 @@
     border: 1px solid #ff3355;
     border-radius: 8px;
     padding: 15px;
+    position: relative;
   }
+
   h2 {
     text-align: center;
     color: #ff3355;
     margin-top: 0;
   }
+
   input[type=file], button {
     margin: 5px 5px 10px 0;
     padding: 4px 8px;
@@ -34,6 +38,7 @@
     border-radius: 4px;
   }
   button:disabled { opacity: 0.5; cursor: not-allowed; }
+
   #tree {
     max-height: 500px;
     overflow-y: auto;
@@ -42,11 +47,13 @@
     border-radius: 4px;
     padding: 5px;
   }
+
   .line {
     display: flex;
     align-items: center;
     margin: 2px 0;
   }
+
   input.key, input.value {
     background: transparent;
     border: 1px dashed #ff5577;
@@ -55,10 +62,12 @@
     margin-right: 4px;
     width: 200px;
   }
+
   .type {
     color: #aaa;
     width: 60px;
   }
+
   .copy-btn {
     background: #300;
     border: 1px solid #ff5577;
@@ -68,11 +77,27 @@
     font-size: 12px;
     margin-left: 4px;
   }
+
+  /* 📋 Nút copy toàn bộ */
+  #copyFullBtn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: #300;
+    border: 1px solid #ff3355;
+    color: #ff3355;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    padding: 4px 8px;
+    display: none;
+  }
 </style>
 </head>
 <body>
 <div class="container">
-  <h2>🚀 Plist Editor - Heius</h2>
+  <h2>🚀 Plist Editor - Cosmic Red</h2>
+  <button id="copyFullBtn">📋 Copy Full Code</button>
   <input type="file" id="fileInput" accept=".plist,.xml,.mobileconfig">
   <button id="downloadBtn" disabled>Tải về (.plist)</button>
   <div id="tree"></div>
@@ -83,6 +108,7 @@ let xmlDoc;
 const fileInput = document.getElementById("fileInput");
 const treeDiv = document.getElementById("tree");
 const downloadBtn = document.getElementById("downloadBtn");
+const copyFullBtn = document.getElementById("copyFullBtn");
 
 fileInput.addEventListener("change", e => {
   const file = e.target.files[0];
@@ -99,6 +125,7 @@ fileInput.addEventListener("change", e => {
     treeDiv.innerHTML = "";
     renderTree(xmlDoc.documentElement, treeDiv);
     downloadBtn.disabled = false;
+    copyFullBtn.style.display = "inline-block";
   };
   reader.readAsText(file);
 });
@@ -112,15 +139,18 @@ function renderTree(node, container) {
       const line = document.createElement("div");
       line.className = "line";
 
+      // key input
       const keyInput = document.createElement("input");
       keyInput.className = "key";
       keyInput.value = keyNode.textContent;
       keyInput.addEventListener("input", () => { keyNode.textContent = keyInput.value; });
       line.appendChild(keyInput);
 
+      // copy key
       const copyKeyBtn = document.createElement("button");
       copyKeyBtn.className = "copy-btn";
       copyKeyBtn.textContent = "📋";
+      copyKeyBtn.title = "Copy key";
       copyKeyBtn.onclick = () => navigator.clipboard.writeText(keyInput.value);
       line.appendChild(copyKeyBtn);
 
@@ -136,43 +166,55 @@ function renderTree(node, container) {
         valInput.addEventListener("input", () => { valueNode.textContent = valInput.value; });
         line.appendChild(valInput);
 
+        // copy value
         const copyValBtn = document.createElement("button");
         copyValBtn.textContent = "📋";
         copyValBtn.className = "copy-btn";
+        copyValBtn.title = "Copy value";
         copyValBtn.onclick = () => navigator.clipboard.writeText(valInput.value);
         line.appendChild(copyValBtn);
       }
 
       container.appendChild(line);
     } else if (child.tagName === "dict" || child.tagName === "array") {
-      renderTree(child, container);
+      renderTree(child, container); // giữ thẳng hàng
     }
   }
 }
 
+// Nút tải file
 downloadBtn.addEventListener("click", () => {
-  let inner = xmlDoc.documentElement.innerHTML;
-  inner = inner
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, "\"");
+  saveXML("edited.plist");
+});
 
-  const header =
-    '<?xml version="1.0" encoding="UTF-8"?>\n' +
-    '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" ' +
-    '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n' +
-    '<plist version="1.0">\n' +
-    inner +
-    '\n</plist>';
+// Nút copy toàn bộ XML
+copyFullBtn.addEventListener("click", () => {
+  if (!xmlDoc) return;
+  const serializer = new XMLSerializer();
+  let xmlStr = serializer.serializeToString(xmlDoc.documentElement);
+  const header = '<?xml version="1.0" encoding="UTF-8"?>\n' +
+                 '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" ' +
+                 '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n';
+  xmlStr = header + xmlStr;
+  navigator.clipboard.writeText(xmlStr);
+  copyFullBtn.textContent = "✅ Copied!";
+  setTimeout(() => (copyFullBtn.textContent = "📋 Copy Full Code"), 1500);
+});
 
-  const blob = new Blob([header], { type: "application/xml" });
+function saveXML(filename) {
+  const serializer = new XMLSerializer();
+  let xmlStr = serializer.serializeToString(xmlDoc.documentElement);
+  const header = '<?xml version="1.0" encoding="UTF-8"?>\n' +
+                 '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" ' +
+                 '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n';
+  xmlStr = header + xmlStr;
+  const blob = new Blob([xmlStr], { type: "application/xml" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "edited.plist";
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(a.href);
-});
+}
 </script>
 </body>
 </html>
