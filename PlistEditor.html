@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
 <meta charset="UTF-8">
-<title>Plist Editor - Cosmic Red (Safe Mobileconfig)</title>
+<title>Plist Editor - Cosmic Red (Fixed)</title>
 <style>
   html, body {
     margin: 0; padding: 0;
@@ -51,10 +51,7 @@
     margin-right: 4px;
     width: 200px;
   }
-  .type {
-    color: #aaa;
-    width: 60px;
-  }
+  .type { color: #aaa; width: 60px; }
   .copy-btn {
     background: #300;
     border: 1px solid #ff5577;
@@ -68,9 +65,9 @@
 </head>
 <body>
 <div class="container">
-  <h2>🚀 Plist Editor - Cosmic Red (Safe Mobileconfig)</h2>
+  <h2>🚀 Plist Editor - Cosmic Red</h2>
   <input type="file" id="fileInput" accept=".plist,.xml,.mobileconfig">
-  <button id="downloadBtn" disabled>Tải về (.mobileconfig)</button>
+  <button id="downloadBtn" disabled>Tải về (.plist)</button>
   <div id="tree"></div>
 </div>
 
@@ -79,22 +76,6 @@ let xmlDoc;
 const fileInput = document.getElementById("fileInput");
 const treeDiv = document.getElementById("tree");
 const downloadBtn = document.getElementById("downloadBtn");
-
-// Escape / Unescape XML helpers
-function escapeXML(str) {
-  return str.replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&apos;");
-}
-function unescapeXML(str) {
-  return str.replace(/&lt;/g, "<")
-            .replace(/&gt;/g, ">")
-            .replace(/&quot;/g, '"')
-            .replace(/&apos;/g, "'")
-            .replace(/&amp;/g, "&");
-}
 
 fileInput.addEventListener("change", e => {
   const file = e.target.files[0];
@@ -108,10 +89,13 @@ fileInput.addEventListener("change", e => {
     }
     const parser = new DOMParser();
     xmlDoc = parser.parseFromString(text, "application/xml");
-    if (xmlDoc.querySelector("parsererror")) {
-      alert("❌ File lỗi XML hoặc chứa ký tự chưa mã hóa (&, <, >).");
+
+    // Nếu lỗi XML
+    if (xmlDoc.getElementsByTagName("parsererror").length > 0) {
+      alert("❌ File plist không hợp lệ hoặc có lỗi cú pháp.");
       return;
     }
+
     treeDiv.innerHTML = "";
     renderTree(xmlDoc.documentElement, treeDiv);
     downloadBtn.disabled = false;
@@ -120,7 +104,7 @@ fileInput.addEventListener("change", e => {
 });
 
 function renderTree(node, container) {
-  for (let i = 0; i < node.children.length; i++) {
+  for (let i=0; i<node.children.length; i++) {
     const child = node.children[i];
     if (child.tagName === "key") {
       const keyNode = child;
@@ -131,8 +115,10 @@ function renderTree(node, container) {
       // key input
       const keyInput = document.createElement("input");
       keyInput.className = "key";
-      keyInput.value = unescapeXML(keyNode.textContent);
-      keyInput.addEventListener("input", () => { keyNode.textContent = escapeXML(keyInput.value); });
+      keyInput.value = keyNode.textContent;
+      keyInput.addEventListener("input", () => {
+        keyNode.textContent = keyInput.value;
+      });
       line.appendChild(keyInput);
 
       // copy key
@@ -151,10 +137,15 @@ function renderTree(node, container) {
 
         const valInput = document.createElement("input");
         valInput.className = "value";
-        valInput.value = unescapeXML(valueNode.textContent);
-        valInput.addEventListener("input", () => { valueNode.textContent = escapeXML(valInput.value); });
+        valInput.value = valueNode.textContent;
+        valInput.addEventListener("input", () => {
+          // Dùng createTextNode để bảo toàn ký tự gốc (không escape)
+          while (valueNode.firstChild) valueNode.removeChild(valueNode.firstChild);
+          valueNode.appendChild(document.createTextNode(valInput.value));
+        });
         line.appendChild(valInput);
 
+        // copy value
         const copyValBtn = document.createElement("button");
         copyValBtn.textContent = "📋";
         copyValBtn.className = "copy-btn";
@@ -170,30 +161,22 @@ function renderTree(node, container) {
   }
 }
 
-// Save as mobileconfig (with proper encoding)
 downloadBtn.addEventListener("click", () => {
-  if (!xmlDoc) return;
-
   const serializer = new XMLSerializer();
-  let xmlStr = serializer.serializeToString(xmlDoc.documentElement);
+  const plistOnly = xmlDoc.documentElement; // chỉ phần <plist>...</plist>
+  let xmlStr = serializer.serializeToString(plistOnly);
 
-  xmlStr = xmlStr.replace(/<parsererror[\s\S]*?<\/parsererror>/g, "");
+  const header =
+    '<?xml version="1.0" encoding="UTF-8"?>\n' +
+    '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" ' +
+    '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n';
 
-  const header = `<?xml version="1.0" encoding="UTF-8"?>\n` +
-                 `<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n` +
-                 `<plist version="1.0">\n`;
-  const footer = `\n</plist>`;
+  xmlStr = header + xmlStr;
 
-  if (xmlStr.trim().startsWith("<plist")) {
-    xmlStr = header + xmlStr.split(/<plist[^>]*>/)[1].split("</plist>")[0] + footer;
-  } else {
-    xmlStr = header + xmlStr + footer;
-  }
-
-  const blob = new Blob([xmlStr], { type: "application/x-apple-aspen-config" });
+  const blob = new Blob([xmlStr], { type: "application/xml" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "edited.mobileconfig";
+  a.download = "edited.plist";
   a.click();
   URL.revokeObjectURL(a.href);
 });
