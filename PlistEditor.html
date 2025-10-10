@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
 <meta charset="UTF-8">
-<title>Plist Editor - Cosmic Red (Fixed)</title>
+<title>Plist Editor - Cosmic Red (Ultimate Fix)</title>
 <style>
   html, body {
     margin: 0; padding: 0;
@@ -38,11 +38,7 @@
     border-radius: 4px;
     padding: 5px;
   }
-  .line {
-    display: flex;
-    align-items: center;
-    margin: 2px 0;
-  }
+  .line { display: flex; align-items: center; margin: 2px 0; }
   input.key, input.value {
     background: transparent;
     border: 1px dashed #ff5577;
@@ -65,7 +61,7 @@
 </head>
 <body>
 <div class="container">
-  <h2>🚀 Plist Editor - Cosmic Red</h2>
+  <h2>🚀 Plist Editor - HeiusDev Maker</h2>
   <input type="file" id="fileInput" accept=".plist,.xml,.mobileconfig">
   <button id="downloadBtn" disabled>Tải về (.plist)</button>
   <div id="tree"></div>
@@ -73,6 +69,7 @@
 
 <script>
 let xmlDoc;
+let rawText = ""; // giữ text gốc đề phòng DOMParser lỗi
 const fileInput = document.getElementById("fileInput");
 const treeDiv = document.getElementById("tree");
 const downloadBtn = document.getElementById("downloadBtn");
@@ -82,17 +79,24 @@ fileInput.addEventListener("change", e => {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = evt => {
-    const text = evt.target.result.trim();
-    if (text.startsWith("bplist")) {
-      alert("❌ File binary plist, convert sang XML trước.");
-      return;
-    }
-    const parser = new DOMParser();
-    xmlDoc = parser.parseFromString(text, "application/xml");
+    // Bỏ BOM ẩn nếu có
+    rawText = evt.target.result.replace(/^\uFEFF/, "").trim();
 
-    // Nếu lỗi XML
+    // DOMParser có thể lỗi, nên bọc try-catch
+    let parser = new DOMParser();
+    xmlDoc = parser.parseFromString(rawText, "application/xml");
+
+    const parseError = xmlDoc.getElementsByTagName("parsererror");
+    if (parseError.length > 0) {
+      // Nếu lỗi parse, thử lại bằng cách làm sạch chuỗi XML
+      rawText = rawText
+        .replace(/&(?!amp;|lt;|gt;|quot;|apos;)/g, "&amp;")
+        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ""); // loại ký tự control
+      xmlDoc = parser.parseFromString(rawText, "application/xml");
+    }
+
     if (xmlDoc.getElementsByTagName("parsererror").length > 0) {
-      alert("❌ File plist không hợp lệ hoặc có lỗi cú pháp.");
+      alert("❌ File plist không hợp lệ hoặc lỗi cú pháp (kể cả sau khi xử lý).");
       return;
     }
 
@@ -104,7 +108,7 @@ fileInput.addEventListener("change", e => {
 });
 
 function renderTree(node, container) {
-  for (let i=0; i<node.children.length; i++) {
+  for (let i = 0; i < node.children.length; i++) {
     const child = node.children[i];
     if (child.tagName === "key") {
       const keyNode = child;
@@ -112,7 +116,6 @@ function renderTree(node, container) {
       const line = document.createElement("div");
       line.className = "line";
 
-      // key input
       const keyInput = document.createElement("input");
       keyInput.className = "key";
       keyInput.value = keyNode.textContent;
@@ -121,7 +124,6 @@ function renderTree(node, container) {
       });
       line.appendChild(keyInput);
 
-      // copy key
       const copyKeyBtn = document.createElement("button");
       copyKeyBtn.className = "copy-btn";
       copyKeyBtn.textContent = "📋";
@@ -139,13 +141,11 @@ function renderTree(node, container) {
         valInput.className = "value";
         valInput.value = valueNode.textContent;
         valInput.addEventListener("input", () => {
-          // Dùng createTextNode để bảo toàn ký tự gốc (không escape)
           while (valueNode.firstChild) valueNode.removeChild(valueNode.firstChild);
           valueNode.appendChild(document.createTextNode(valInput.value));
         });
         line.appendChild(valInput);
 
-        // copy value
         const copyValBtn = document.createElement("button");
         copyValBtn.textContent = "📋";
         copyValBtn.className = "copy-btn";
@@ -153,7 +153,6 @@ function renderTree(node, container) {
         copyValBtn.onclick = () => navigator.clipboard.writeText(valInput.value);
         line.appendChild(copyValBtn);
       }
-
       container.appendChild(line);
     } else if (child.tagName === "dict" || child.tagName === "array") {
       renderTree(child, container);
@@ -163,14 +162,15 @@ function renderTree(node, container) {
 
 downloadBtn.addEventListener("click", () => {
   const serializer = new XMLSerializer();
-  const plistOnly = xmlDoc.documentElement; // chỉ phần <plist>...</plist>
+  const plistOnly = xmlDoc.documentElement;
+
   let xmlStr = serializer.serializeToString(plistOnly);
 
+  // Thêm header chuẩn
   const header =
     '<?xml version="1.0" encoding="UTF-8"?>\n' +
     '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" ' +
     '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n';
-
   xmlStr = header + xmlStr;
 
   const blob = new Blob([xmlStr], { type: "application/xml" });
@@ -179,6 +179,14 @@ downloadBtn.addEventListener("click", () => {
   a.download = "edited.plist";
   a.click();
   URL.revokeObjectURL(a.href);
+});
+
+// Thêm phím tắt Ctrl+S
+document.addEventListener("keydown", e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+    e.preventDefault();
+    if (!downloadBtn.disabled) downloadBtn.click();
+  }
 });
 </script>
 </body>
