@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
 <meta charset="utf-8">
-<title>Giải mã ký tự XML sâu - Không đơ</title>
+<title>Deep XML Decoder - Worker</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
 body{
@@ -31,13 +31,13 @@ button:disabled{opacity:0.4;cursor:not-allowed;}
 </head>
 <body>
 <div class="container">
-<h2>🧩 Deep XML Decoder</h2>
+<h2>🧩 Deep XML Decoder (Web Worker)</h2>
 <input type="file" id="fileInput" accept=".plist,.xml,.mobileconfig,.txt">
 <button id="decodeBtn" disabled>Giải mã</button>
 <button id="downloadBtn" disabled>Tải về (.txt)</button>
 <div class="progress"><div class="bar" id="bar"></div></div>
 <div id="output">Chưa có dữ liệu.</div>
-<div class="note">Giải mã toàn bộ ký tự &lt; &gt; &amp; &#x...; và sâu nhiều lớp. Không bị treo trình duyệt.</div>
+<div class="note">Giải mã cực sâu, chạy trong luồng nền, không bao giờ đơ.</div>
 </div>
 
 <script>
@@ -48,6 +48,7 @@ const output=document.getElementById("output");
 const bar=document.getElementById("bar");
 
 let raw="",decoded="",filename="decoded";
+let worker;
 
 f.onchange=()=>{
   const file=f.files[0];
@@ -64,50 +65,54 @@ f.onchange=()=>{
   reader.readAsText(file);
 };
 
-function decodeChunk(chunk){
-  const t=document.createElement("textarea");
-  t.innerHTML=chunk;
-  return t.value;
-}
-
-function deepDecodeAsync(text,callback){
-  const total=text.length;
-  const step=100000; // xử lý 100k ký tự/lần
-  let result="",index=0;
-  function processNext(){
-    const part=text.slice(index,index+step);
-    result+=decodeChunk(part);
-    index+=step;
-    bar.style.width=Math.min(40+(index/total*60),100)+"%";
-    if(index<total){
-      setTimeout(processNext,5);
-    }else{
-      // Giải mã sâu nhiều lớp (tối đa 5 lần)
-      let prev="",cur=result,loop=0;
-      while(cur!==prev && loop<5){
-        prev=cur;
-        cur=decodeChunk(cur);
-        loop++;
-      }
-      callback(cur);
-    }
-  }
-  processNext();
-}
-
 decodeBtn.onclick=()=>{
   if(!raw)return;
   decodeBtn.disabled=true;
-  output.textContent="Đang giải mã sâu...";
+  output.textContent="Đang giải mã trong nền...";
   bar.style.width="30%";
-  setTimeout(()=>{
-    deepDecodeAsync(raw,res=>{
-      decoded=res;
+  if(worker)worker.terminate();
+  worker=new Worker(URL.createObjectURL(new Blob([`
+    function decodeChunk(chunk){
+      const t=document.createElement("textarea");
+      t.innerHTML=chunk;
+      return t.value;
+    }
+    onmessage=e=>{
+      const text=e.data;
+      const total=text.length;
+      const step=200000;
+      let result="",index=0;
+      function loop(){
+        const part=text.slice(index,index+step);
+        result+=decodeChunk(part);
+        index+=step;
+        postMessage({type:"progress",value:index/total});
+        if(index<total)setTimeout(loop,1);
+        else{
+          let prev="",cur=result,loopCount=0;
+          while(cur!==prev && loopCount<5){
+            prev=cur;cur=decodeChunk(cur);loopCount++;
+          }
+          postMessage({type:"done",data:cur});
+        }
+      }
+      loop();
+    };
+  `],{type:"text/javascript"})));
+
+  worker.onmessage=e=>{
+    if(e.data.type==="progress"){
+      bar.style.width=(30+e.data.value*70)+"%";
+    }else if(e.data.type==="done"){
+      decoded=e.data.data;
       output.textContent=decoded||"(trống)";
       bar.style.width="100%";
       downloadBtn.disabled=false;
-    });
-  },50);
+      worker.terminate();
+    }
+  };
+
+  worker.postMessage(raw);
 };
 
 downloadBtn.onclick=()=>{
