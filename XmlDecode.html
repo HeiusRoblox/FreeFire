@@ -2,115 +2,123 @@
 <html lang="vi">
 <head>
 <meta charset="utf-8">
-<title>Giải mã ký tự - Deep Decoder</title>
+<title>Giải mã ký tự XML sâu - Không đơ</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
 body{
-  background:#0d0000;
-  color:#fff;
-  font-family:monospace;
+  background:#0a0000;color:#fff;font-family:monospace;
   margin:0;padding:20px;
 }
-h2{color:#ff3355;margin-top:0;text-align:center;}
+h2{text-align:center;color:#ff5577;margin-top:0;}
 .container{
-  max-width:900px;margin:0 auto;background:#200000;
+  max-width:900px;margin:0 auto;background:#1b0000;
   border:1px solid #ff3355;border-radius:8px;padding:16px;
 }
 input[type=file],button{
-  background:#300;border:1px solid #ff3355;color:#ff3355;
-  border-radius:4px;padding:6px 10px;cursor:pointer;
-  margin:5px 3px;
+  background:#300;border:1px solid #ff3355;color:#ff5577;
+  border-radius:4px;padding:6px 10px;margin:5px 3px;cursor:pointer;
 }
-button:disabled{opacity:0.5;cursor:not-allowed;}
+button:disabled{opacity:0.4;cursor:not-allowed;}
 #output{
-  background:#150000;border:1px solid #ff3355;
+  background:#140000;border:1px solid #ff3355;
   border-radius:4px;padding:10px;margin-top:10px;
   max-height:500px;overflow:auto;white-space:pre-wrap;
 }
-.progress{
-  height:6px;background:#400;margin-top:6px;border-radius:3px;
-  overflow:hidden;
-}
-.progress-bar{
-  height:100%;width:0;background:#ff3355;transition:width .2s;
-}
-.note{color:#bbb;font-size:13px;margin-top:8px;}
+.progress{height:6px;background:#400;margin-top:6px;border-radius:3px;overflow:hidden;}
+.bar{height:100%;width:0;background:#ff5577;transition:width .2s;}
+.note{font-size:13px;color:#ccc;margin-top:8px;}
 </style>
 </head>
 <body>
 <div class="container">
-  <h2>🚀 Deep Decode & Download</h2>
-  <input type="file" id="fileInput" accept=".plist,.xml,.txt,.mobileconfig">
-  <button id="decodeBtn" disabled>Giải mã</button>
-  <button id="downloadBtn" disabled>Tải về (.txt)</button>
-  <div class="progress"><div class="progress-bar" id="bar"></div></div>
-  <div id="output">Chưa có nội dung.</div>
-  <div class="note">Tự động giải mã toàn bộ các ký tự XML/HTML sâu nhiều lớp (lt, gt, amp, quot, #x...).</div>
+<h2>🧩 Deep XML Decoder</h2>
+<input type="file" id="fileInput" accept=".plist,.xml,.mobileconfig,.txt">
+<button id="decodeBtn" disabled>Giải mã</button>
+<button id="downloadBtn" disabled>Tải về (.txt)</button>
+<div class="progress"><div class="bar" id="bar"></div></div>
+<div id="output">Chưa có dữ liệu.</div>
+<div class="note">Giải mã toàn bộ ký tự &lt; &gt; &amp; &#x...; và sâu nhiều lớp. Không bị treo trình duyệt.</div>
 </div>
 
 <script>
-const fileInput=document.getElementById("fileInput");
+const f=document.getElementById("fileInput");
 const decodeBtn=document.getElementById("decodeBtn");
 const downloadBtn=document.getElementById("downloadBtn");
 const output=document.getElementById("output");
 const bar=document.getElementById("bar");
 
-let rawText="",decodedText="",fileName="decoded";
+let raw="",decoded="",filename="decoded";
 
-fileInput.addEventListener("change",()=>{
-  const file=fileInput.files[0];
+f.onchange=()=>{
+  const file=f.files[0];
   if(!file)return;
-  fileName=file.name.replace(/\.[^.]+$/,"");
-  output.textContent="Đang đọc file...";
-  bar.style.width="5%";
+  filename=file.name.replace(/\.[^.]+$/,"");
   const reader=new FileReader();
-  reader.onload=ev=>{
-    rawText=ev.target.result.replace(/^\uFEFF/,"");
-    output.textContent="Đã tải file. Nhấn 'Giải mã' để bắt đầu.";
+  reader.onload=e=>{
+    raw=e.target.result.replace(/^\uFEFF/,"");
+    output.textContent="Đã đọc file. Nhấn 'Giải mã' để bắt đầu.";
     bar.style.width="20%";
     decodeBtn.disabled=false;
     downloadBtn.disabled=true;
   };
-  reader.onerror=()=>{output.textContent="Lỗi khi đọc file.";};
   reader.readAsText(file);
-});
+};
 
-function decodeOnce(str){
+function decodeChunk(chunk){
   const t=document.createElement("textarea");
-  t.innerHTML=str;
+  t.innerHTML=chunk;
   return t.value;
 }
-function deepDecode(str){
-  let prev="",cur=str,i=0;
-  while(cur!==prev&&i<100){
-    prev=cur;
-    cur=decodeOnce(cur);
-    i++;
+
+function deepDecodeAsync(text,callback){
+  const total=text.length;
+  const step=100000; // xử lý 100k ký tự/lần
+  let result="",index=0;
+  function processNext(){
+    const part=text.slice(index,index+step);
+    result+=decodeChunk(part);
+    index+=step;
+    bar.style.width=Math.min(40+(index/total*60),100)+"%";
+    if(index<total){
+      setTimeout(processNext,5);
+    }else{
+      // Giải mã sâu nhiều lớp (tối đa 5 lần)
+      let prev="",cur=result,loop=0;
+      while(cur!==prev && loop<5){
+        prev=cur;
+        cur=decodeChunk(cur);
+        loop++;
+      }
+      callback(cur);
+    }
   }
-  return cur;
+  processNext();
 }
 
-decodeBtn.addEventListener("click",()=>{
-  if(!rawText){output.textContent="Chưa có dữ liệu.";return;}
+decodeBtn.onclick=()=>{
+  if(!raw)return;
+  decodeBtn.disabled=true;
   output.textContent="Đang giải mã sâu...";
-  bar.style.width="40%";
+  bar.style.width="30%";
   setTimeout(()=>{
-    decodedText=deepDecode(rawText);
-    bar.style.width="100%";
-    output.textContent=decodedText||"(Trống)";
-    downloadBtn.disabled=false;
-  },30);
-});
+    deepDecodeAsync(raw,res=>{
+      decoded=res;
+      output.textContent=decoded||"(trống)";
+      bar.style.width="100%";
+      downloadBtn.disabled=false;
+    });
+  },50);
+};
 
-downloadBtn.addEventListener("click",()=>{
-  if(!decodedText)return;
-  const blob=new Blob([decodedText],{type:"text/plain;charset=utf-8"});
+downloadBtn.onclick=()=>{
+  if(!decoded)return;
+  const blob=new Blob([decoded],{type:"text/plain;charset=utf-8"});
   const a=document.createElement("a");
   a.href=URL.createObjectURL(blob);
-  a.download=fileName+".decoded.txt";
+  a.download=filename+".decoded.txt";
   a.click();
   URL.revokeObjectURL(a.href);
-});
+};
 </script>
 </body>
 </html>
