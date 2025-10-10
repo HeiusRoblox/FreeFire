@@ -72,7 +72,7 @@
 </head>
 <body>
 <div class="container">
-  <h2>🚀 Plist Editor - Cosmic Red</h2>
+  <h2>🚀 Plist Editor - Heius</h2>
   <input type="file" id="fileInput" accept=".plist,.xml,.mobileconfig">
   <button id="downloadBtn" disabled>Tải về (.plist)</button>
   <div id="tree"></div>
@@ -151,9 +151,8 @@ function renderTree(node, container) {
 }
 
 downloadBtn.addEventListener("click", () => {
-  const serializer = new XMLSerializer();
-  let xmlStr = serializer.serializeToString(xmlDoc.documentElement);
-  xmlStr = xmlStr
+  let inner = xmlDoc.documentElement.innerHTML;
+  inner = inner
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&amp;/g, "&")
@@ -162,10 +161,12 @@ downloadBtn.addEventListener("click", () => {
   const header =
     '<?xml version="1.0" encoding="UTF-8"?>\n' +
     '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" ' +
-    '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n';
-  xmlStr = header + xmlStr;
+    '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n' +
+    '<plist version="1.0">\n' +
+    inner +
+    '\n</plist>';
 
-  const blob = new Blob([xmlStr], { type: "application/xml" });
+  const blob = new Blob([header], { type: "application/xml" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = "edited.plist";
