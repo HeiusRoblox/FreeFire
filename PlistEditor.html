@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Mobile Plist Editor</title>
+
+<style>
+body {
+  background:#0f1117;
+  color:#e6e6e6;
+  font-family:-apple-system,BlinkMacSystemFont,"SF Mono",monospace;
+  margin:0;
+  font-size:16px;
+}
+header {
+  padding:12px;
+  background:#151926;
+  display:flex;
+  gap:8px;
+  position:sticky;
+  top:0;
+  z-index:10;
+}
+button {
+  background:#1f2437;
+  border:1px solid #2c3352;
+  color:#fff;
+  padding:12px 14px;
+  min-height:44px;
+  border-radius:10px;
+  font-size:15px;
+}
+button:active {
+  transform:scale(0.97);
+  background:#2a3050;
+}
+input[type=file] {
+  font-size:14px;
+  color:#aaa;
+}
+#tree { padding:12px }
+.node {
+  margin-left:14px;
+  border-left:1px dashed #333;
+  padding-left:10px;
+}
+.key {
+  color:#6cf;
+  font-size:16px;
+  padding:6px 4px;
+  display:inline-block;
+}
+.type {
+  color:#fa6;
+  font-size:13px;
+  margin-left:6px;
+}
+.value {
+  color:#9f9;
+  font-size:16px;
+  padding:6px 4px;
+  display:inline-block;
+}
+.ctrl {
+  margin-left:6px;
+  padding:6px 10px;
+  border-radius:8px;
+  background:#1a1f33;
+  color:#ccc;
+  font-size:16px;
+}
+.ctrl:active {
+  background:#2a3050;
+  color:#fff;
+}
+.collapsed > .node { display:none }
+</style>
+</head>
+
+<body>
+
+<header>
+  <input type="file" id="file">
+  <button onclick="addRootKey()">＋ Key</button>
+  <button onclick="sortKeys()">Sort</button>
+  <button onclick="downloadPlist()">Plist</button>
+  <button onclick="downloadZip()">ZIP</button>
+</header>
+
+<div id="tree"></div>
+
+<!-- JSZIP (embedded) -->
+<script>
+/*! JSZip v3.10.1 | MIT */
+!function(e){if("object"==typeof exports&&"undefined"!=typeof module)module.exports=e();else if("function"==typeof define&&define.amd)define([],e);else{var t;"undefined"!=typeof window?t=window:"undefined"!=typeof global?t=global:"undefined"!=typeof self&&(t=self),t.JSZip=e()}}(function(){return function o(a,s,l){function u(t,e){if(!s[t]){if(!a[t]){var r="function"==typeof require&&require;if(!e&&r)return r(t,!0);if(c)return c(t,!0);throw new Error("Cannot find module '"+t+"'")}var n=s[t]={exports:{}};a[t][0].call(n.exports,function(e){return u(a[t][1][e]||e)},n,n.exports,o,a,s,l)}return s[t].exports}for(var c="function"==typeof require&&require,e=0;e<l.length;e++)u(l[e]);return u}({},{},[])});
+</script>
+
+<script>
+let plistDoc=null, rootDict=null;
+
+document.getElementById("file").onchange=e=>{
+  const r=new FileReader();
+  r.onload=()=>loadPlist(r.result);
+  r.readAsText(e.target.files[0]);
+};
+
+function loadPlist(xml){
+  plistDoc=new DOMParser().parseFromString(xml,"application/xml");
+  rootDict=plistDoc.querySelector("plist>dict");
+  render();
+}
+
+function render(){
+  document.getElementById("tree").innerHTML=renderDict(rootDict);
+}
+
+function renderDict(dict){
+  let html="";
+  const c=[...dict.children];
+  for(let i=0;i<c.length;i+=2){
+    const k=c[i], v=c[i+1];
+    html+=`
+    <div>
+      <span class="ctrl" onclick="toggle(this)">▾</span>
+      <span class="key" contenteditable onblur="kEdit('${k.textContent}',this)">${k.textContent}</span>
+      <span class="type">${v.tagName}</span>
+      <span class="ctrl" onclick="addPair()">＋</span>
+      <span class="ctrl" onclick="delPair('${k.textContent}')">✕</span>
+      ${renderValue(v)}
+    </div>`;
+  }
+  return html;
+}
+
+function renderValue(v){
+  if(v.tagName==="dict")
+    return `<div class="node">${renderDict(v)}</div>`;
+  if(v.tagName==="array")
+    return `<div class="node">[array]</div>`;
+  return `<span class="value" contenteditable onblur="vEdit('${v.textContent}',this)">${v.textContent}</span>`;
+}
+
+function toggle(el){
+  const p=el.parentElement;
+  p.classList.toggle("collapsed");
+  el.textContent=p.classList.contains("collapsed")?"▸":"▾";
+}
+
+function kEdit(old,el){
+  [...rootDict.querySelectorAll("key")].forEach(k=>{
+    if(k.textContent===old) k.textContent=el.textContent;
+  });
+}
+
+function vEdit(old,el){
+  [...plistDoc.querySelectorAll("string,integer,real")].forEach(v=>{
+    if(v.textContent===old) v.textContent=el.textContent;
+  });
+}
+
+function addRootKey(){
+  if(!rootDict) return;
+  const k=plistDoc.createElement("key");
+  k.textContent="NewKey";
+  const v=plistDoc.createElement("string");
+  v.textContent="";
+  rootDict.append(k,v);
+  render();
+}
+
+function addPair(){ addRootKey() }
+
+function delPair(name){
+  const n=[...rootDict.children];
+  for(let i=0;i<n.length;i+=2){
+    if(n[i].textContent===name){
+      n[i].remove(); n[i+1].remove(); break;
+    }
+  }
+  render();
+}
+
+function sortKeys(){
+  const p=[];
+  const n=[...rootDict.children];
+  for(let i=0;i<n.length;i+=2) p.push([n[i],n[i+1]]);
+  p.sort((a,b)=>a[0].textContent.localeCompare(b[0].textContent));
+  rootDict.innerHTML="";
+  p.forEach(x=>rootDict.append(x[0],x[1]));
+  render();
+}
+
+function downloadPlist(){
+  const xml=new XMLSerializer().serializeToString(plistDoc);
+  save(xml,"config.plist","application/xml");
+}
+
+function downloadZip(){
+  const zip=new JSZip();
+  const xml=new XMLSerializer().serializeToString(plistDoc);
+  zip.file("config.plist",xml);
+  zip.generateAsync({type:"blob"}).then(b=>{
+    save(b,"plist-config.zip","application/zip");
+  });
+}
+
+function save(data,name,type){
+  const blob=data instanceof Blob?data:new Blob([data],{type});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=name;
+  a.click();
+}
+</script>
+
+</body>
+</html>
